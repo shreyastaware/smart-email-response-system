@@ -1,11 +1,16 @@
 import os
 import time
 from typing import List, Dict, Optional
-from portia import Portia, PlanRun, Tool, Clarification, PlanBuilder
+
+# Set Portia API key before importing
+from config import Config
+os.environ['PORTIA_API_KEY'] = Config.PORTIA_API_KEY
+
+from portia import Portia, PlanRun, Clarification, PlanBuilder
+from portia_tool_wrapper import CustomTool, create_tool
 from gmail_processor import GmailProcessor
 from docs_processor import DocsProcessor
 from document_processor import DocumentProcessor
-from config import Config
 
 class EmailDocumentAgent:
     """Main Portia AI agent for processing emails and documents"""
@@ -16,7 +21,7 @@ class EmailDocumentAgent:
         self.document_processor = DocumentProcessor()
         
         # Initialize Portia client
-        self.portia = Portia(api_key=Config.PORTIA_API_KEY)
+        self.portia = Portia()
         
         # Define tools
         self.tools = [
@@ -27,7 +32,7 @@ class EmailDocumentAgent:
             self._create_email_sender_tool()
         ]
     
-    def _create_email_reader_tool(self) -> Tool:
+    def _create_email_reader_tool(self) -> CustomTool:
         """Create tool for reading emails from the last 7 days"""
         def read_emails(days_back: int = 7, max_results: int = 100) -> Dict:
             try:
@@ -47,13 +52,13 @@ class EmailDocumentAgent:
                     'error': str(e)
                 }
         
-        return Tool(
+        return create_tool(
             name="read_emails",
             description="Read recent emails from the last 7 days and intelligently identify those requiring responses about pending documents",
             function=read_emails
         )
     
-    def _create_docs_reader_tool(self) -> Tool:
+    def _create_docs_reader_tool(self) -> CustomTool:
         """Create tool for reading Google Docs"""
         def read_docs() -> Dict:
             try:
@@ -72,13 +77,13 @@ class EmailDocumentAgent:
                     'error': str(e)
                 }
         
-        return Tool(
+        return create_tool(
             name="read_docs",
             description="Read all Google Docs and identify completed documents marked with 'Done'",
             function=read_docs
         )
     
-    def _create_document_matcher_tool(self) -> Tool:
+    def _create_document_matcher_tool(self) -> CustomTool:
         """Create tool for intelligently matching documents to emails"""
         def match_documents(email_data: Dict, completed_docs: List[Dict]) -> Dict:
             try:
@@ -100,13 +105,13 @@ class EmailDocumentAgent:
                     'error': str(e)
                 }
         
-        return Tool(
+        return create_tool(
             name="match_documents",
             description="Intelligently match completed documents to email using content analysis, document references, and semantic matching",
             function=match_documents
         )
     
-    def _create_document_processor_tool(self) -> Tool:
+    def _create_document_processor_tool(self) -> CustomTool:
         """Create tool for processing documents and creating summaries"""
         def process_document(doc_id: str) -> Dict:
             try:
@@ -144,13 +149,13 @@ class EmailDocumentAgent:
                     'error': str(e)
                 }
         
-        return Tool(
+        return create_tool(
             name="process_document",
             description="Process document to create summary and PDF",
             function=process_document
         )
     
-    def _create_email_sender_tool(self) -> Tool:
+    def _create_email_sender_tool(self) -> CustomTool:
         """Create tool for sending response emails"""
         def send_response_email(original_email: Dict, document_data: Dict, summary: str, pdf_path: Optional[str] = None) -> Dict:
             try:
@@ -181,7 +186,7 @@ class EmailDocumentAgent:
                     'error': str(e)
                 }
         
-        return Tool(
+        return create_tool(
             name="send_response_email",
             description="Compose and send response email with document summary and PDF attachment",
             function=send_response_email
@@ -250,8 +255,8 @@ class EmailDocumentAgent:
             print("🚀 Starting Email Document Processing Workflow...")
             
             # Step 1: Read emails from last 7 days
-            print("📧 Step 1: Reading recent emails (last 7 days)...")
-            email_result = self.tools[0].function(days_back=7, max_results=100)
+            print("📧 Step 1: Reading recent emails (last 3 days)...")
+            email_result = self.tools[0].function(days_back=3, max_results=30)
             results['steps_completed'].append('read_emails')
             
             if not email_result['success']:

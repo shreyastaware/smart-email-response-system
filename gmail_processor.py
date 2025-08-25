@@ -189,29 +189,40 @@ Please respond in JSON format with:
 Focus on whether this email is asking for ANY kind of written work, deliverable, or document - not just specific keywords.
 """
 
-            response = self.client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are an expert email analyst. Analyze emails to identify requests for documents, reports, proposals, or any written deliverables."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=300,
-                temperature=0.1
-            )
-            
-            # Parse the response
-            import json
-            analysis = json.loads(response.choices[0].message.content.strip())
-            
-            return {
-                'requires_response': analysis.get('requires_document_response', False),
-                'confidence_score': float(analysis.get('confidence_score', 0.0)),
-                'matched_keywords': [analysis.get('document_type_mentioned', 'document')],
-                'document_references': analysis.get('document_references', []),
-                'reasoning': analysis.get('reasoning', ''),
-                'urgency_level': analysis.get('urgency_level', 'medium'),
-                'analysis_method': 'openai_analysis'
-            }
+            if 'gmail.com' in sender:
+                response = self.client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": "You are an expert email analyst. Analyze emails to identify requests for documents, reports, proposals, or any written deliverables."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=300,
+                    temperature=0.1
+                )
+                
+                # Parse the response
+                import json
+                analysis = json.loads(response.choices[0].message.content.strip())
+                
+                return {
+                    'requires_response': analysis.get('requires_document_response', False),
+                    'confidence_score': float(analysis.get('confidence_score', 0.0)),
+                    'matched_keywords': [analysis.get('document_type_mentioned', 'document')],
+                    'document_references': analysis.get('document_references', []),
+                    'reasoning': analysis.get('reasoning', ''),
+                    'urgency_level': analysis.get('urgency_level', 'medium'),
+                    'analysis_method': 'openai_analysis'
+                }
+            else:
+                return {
+                    'requires_response': False,
+                    'confidence_score': 0.0,
+                    'matched_keywords': 'document',
+                    'document_references': [],
+                    'reasoning': '',
+                    'urgency_level': 'medium',
+                    'analysis_method': 'openai_analysis'
+                }
             
         except Exception as e:
             print(f"Error in OpenAI analysis: {e}")
