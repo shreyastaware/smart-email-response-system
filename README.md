@@ -1,6 +1,6 @@
-# Done & Delivered - Portia AI Email Response System
+# Smart Email Response System
 
-A streamlined email automation system powered entirely by Portia AI's cloud tools. No custom processors needed - just pure Portia AI intelligence!
+A streamlined email automation system that scans your gmail for pending work, extracts completed work from your google docs and sends the update!
 
 ## ✨ What It Does
 
