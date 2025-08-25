@@ -203,7 +203,7 @@ def main():
         processor = EmailDocumentProcessor()
         
         # Execute with default settings (7 days, 100 emails max)
-        results = processor.execute_workflow(days_back=7, max_results=100)
+        results = processor.execute_workflow(days_back=3, max_results=100)
         
         # Display summary
         print("\\n" + "=" * 60)

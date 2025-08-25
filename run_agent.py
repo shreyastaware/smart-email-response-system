@@ -71,7 +71,7 @@ def main():
         print()
         
         # Execute the workflow (7 days back, max 100 emails)
-        results = processor.execute_workflow(days_back=7, max_results=100)
+        results = processor.execute_workflow(days_back=3, max_results=100)
         
         # Display results
         print("\\n" + "=" * 60)

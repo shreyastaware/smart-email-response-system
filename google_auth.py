@@ -33,12 +33,12 @@ class GoogleAuthenticator:
                             "client_secret": Config.GOOGLE_CLIENT_SECRET,
                             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                             "token_uri": "https://oauth2.googleapis.com/token",
-                            "redirect_uris": ["urn:ietf:wg:oauth:2.0:oob", "http://localhost"]
+                            "redirect_uris": ["http://localhost:8080"]
                         }
                     },
                     Config.GMAIL_SCOPES
                 )
-                creds = flow.run_local_server(port=0)
+                creds = flow.run_local_server(port=8080)
             
             # Save the credentials for the next run
             with open(token_file, 'wb') as token:
@@ -67,12 +67,12 @@ class GoogleAuthenticator:
                             "client_secret": Config.GOOGLE_CLIENT_SECRET,
                             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                             "token_uri": "https://oauth2.googleapis.com/token",
-                            "redirect_uris": ["urn:ietf:wg:oauth:2.0:oob", "http://localhost"]
+                            "redirect_uris": ["http://localhost:8080"]
                         }
                     },
                     Config.DOCS_SCOPES
                 )
-                creds = flow.run_local_server(port=0)
+                creds = flow.run_local_server(port=8080)
             
             with open(token_file, 'wb') as token:
                 pickle.dump(creds, token)

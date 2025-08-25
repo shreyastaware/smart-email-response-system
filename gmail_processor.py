@@ -213,7 +213,7 @@ class GmailProcessor:
         
         # Extract potential document references
         doc_name_patterns = [
-            r'"([^"%]*(?:document|doc|file|report|paper|project)[^"%]*)"|\''([^\]'*(?:document|doc|file|report|paper|project)[^\]'*)\'',
+            r'"([^"%]*(?:document|doc|file|report|paper|project)[^"%]*)"|\'([^\']*(?:document|doc|file|report|paper|project)[^\']*)\'',
             r'\b([A-Z][a-zA-Z\s]+(?:Report|Document|Paper|Project|Analysis))\b',
             r'\b(\w+\s+(?:document|doc|file|report|paper|project))\b'
         ]
