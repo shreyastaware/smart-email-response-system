@@ -28,7 +28,7 @@ class GmailProcessor:
         
         try:
             # Calculate date range (last N days)
-            end_date = datetime.now()
+            end_date = datetime.now() + timedelta(days=1)
             start_date = end_date - timedelta(days=days_back)
             
             # Format dates for Gmail API query
@@ -203,6 +203,8 @@ Focus on whether this email is asking for ANY kind of written work, deliverable,
                 # Parse the response
                 import json
                 analysis = json.loads(response.choices[0].message.content.strip())
+                print(analysis)
+                print("-------")
                 
                 return {
                     'requires_response': analysis.get('requires_document_response', False),
@@ -214,6 +216,7 @@ Focus on whether this email is asking for ANY kind of written work, deliverable,
                     'analysis_method': 'openai_analysis'
                 }
             else:
+                print(sender, 'is not valid')
                 return {
                     'requires_response': False,
                     'confidence_score': 0.0,
@@ -265,6 +268,51 @@ Focus on whether this email is asking for ANY kind of written work, deliverable,
             message['to'] = to_email
             message['subject'] = subject
             
+            # Add yourself to CC
+            from config import Config
+            if Config.USER_EMAIL:
+                message['cc'] = Config.USER_EMAIL
+                print(f"📋 Adding {Config.USER_EMAIL} to CC")
+            
+            # If this is a reply, add proper threading headers
+            if original_email_id:
+                try:
+                    # Get the original message with full headers
+                    original_message = self.service.users().messages().get(
+                        userId='me',
+                        id=original_email_id,
+                        format='full'
+                    ).execute()
+                    
+                    # Extract headers from original message
+                    headers = original_message['payload'].get('headers', [])
+                    
+                    # Find important headers for threading
+                    message_id = None
+                    references = None
+                    thread_id = original_message.get('threadId')
+                    
+                    for header in headers:
+                        if header['name'] == 'Message-ID':
+                            message_id = header['value']
+                        elif header['name'] == 'References':
+                            references = header['value']
+                    
+                    # Add threading headers
+                    if message_id:
+                        message['In-Reply-To'] = message_id
+                        print(f"📧 Adding In-Reply-To: {message_id}")
+                        
+                        # Build References header
+                        if references:
+                            message['References'] = f"{references} {message_id}"
+                        else:
+                            message['References'] = message_id
+                        print(f"📧 Adding References header")
+                    
+                except Exception as e:
+                    print(f"⚠️ Could not get threading headers: {e}")
+            
             # Add body
             message.attach(MIMEText(body, 'plain'))
             
@@ -286,10 +334,9 @@ Focus on whether this email is asking for ANY kind of written work, deliverable,
             # Prepare send body
             send_body = {'raw': raw_message}
             
-            # If this is a reply, add threading information
+            # Add thread ID if this is a reply
             if original_email_id:
                 try:
-                    # Get the original message to extract thread ID
                     original_message = self.service.users().messages().get(
                         userId='me',
                         id=original_email_id,
@@ -302,7 +349,7 @@ Focus on whether this email is asking for ANY kind of written work, deliverable,
                         print(f"📧 Sending as reply to thread: {thread_id}")
                     
                 except Exception as e:
-                    print(f"⚠️ Could not get thread info, sending as new message: {e}")
+                    print(f"⚠️ Could not get thread info: {e}")
             
             # Send message
             send_message = self.service.users().messages().send(
@@ -311,7 +358,7 @@ Focus on whether this email is asking for ANY kind of written work, deliverable,
             ).execute()
             
             if original_email_id:
-                print(f"✅ Reply sent successfully. Message ID: {send_message['id']}")
+                print(f"✅ Reply sent successfully with threading headers. Message ID: {send_message['id']}")
             else:
                 print(f"✅ Email sent successfully. Message ID: {send_message['id']}")
             return True

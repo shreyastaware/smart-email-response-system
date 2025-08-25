@@ -36,6 +36,7 @@ class EmailDocumentAgent:
         """Create tool for reading emails from the last 7 days"""
         def read_emails(days_back: int = 7, max_results: int = 100) -> Dict:
             try:
+                # print(days_back, max_results)
                 emails = self.gmail_processor.get_recent_emails(days_back, max_results)
                 response_required = self.gmail_processor.identify_response_required_emails(emails)
                 
@@ -289,7 +290,7 @@ class EmailDocumentAgent:
             
             # Step 1: Read emails from last 7 days
             print("📧 Step 1: Reading recent emails (last 3 days)...")
-            email_result = self.tools[0].function(days_back=3, max_results=30)
+            email_result = self.tools[0].function(days_back=3, max_results=100)
             results['steps_completed'].append('read_emails')
             
             if not email_result['success']:
