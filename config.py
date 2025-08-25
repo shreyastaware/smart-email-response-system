@@ -29,16 +29,5 @@ class Config:
         'https://www.googleapis.com/auth/drive.readonly'
     ]
     
-    # Keywords to identify emails requiring responses
-    RESPONSE_KEYWORDS = [
-        'pending document',
-        'document review',
-        'please review',
-        'awaiting document',
-        'document status',
-        'completed work',
-        'finished document'
-    ]
-    
     # Document completion marker
     COMPLETION_MARKER = 'Done'

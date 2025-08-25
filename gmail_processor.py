@@ -6,6 +6,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
 from datetime import datetime, timedelta
+import openai
 from google_auth import GoogleAuthenticator
 from config import Config
 
@@ -13,6 +14,8 @@ class GmailProcessor:
     def __init__(self):
         self.auth = GoogleAuthenticator()
         self.service = None
+        # Initialize OpenAI client
+        self.client = openai.OpenAI(api_key=Config.OPENAI_API_KEY)
     
     def initialize(self):
         """Initialize Gmail service"""
@@ -154,102 +157,91 @@ class GmailProcessor:
         return response_required
     
     def _analyze_email_content(self, email: Dict) -> Dict:
-        """Analyze email content to determine if it requires a response about documents"""
+        """Analyze email content using OpenAI to determine if it requires a document response"""
+        subject = email['subject']
+        body = email['body']
+        sender = email['sender']
+        
+        try:
+            # Create a prompt for OpenAI to analyze the email
+            prompt = f"""
+Analyze this email to determine if the sender is requesting, asking about, or expecting:
+1. A document, report, proposal, PDF, or any written deliverable
+2. An update on work progress or project status
+3. A review of completed work
+4. Any form of written output or deliverable
+
+Email Details:
+Subject: {subject}
+From: {sender}
+Body: {body[:1000]}...  
+
+Please respond in JSON format with:
+{{
+    "requires_document_response": true/false,
+    "confidence_score": 0.0-1.0,
+    "reasoning": "brief explanation",
+    "document_type_mentioned": "type of document if mentioned (report, proposal, etc.)",
+    "urgency_level": "low/medium/high",
+    "document_references": ["any specific document names mentioned"]
+}}
+
+Focus on whether this email is asking for ANY kind of written work, deliverable, or document - not just specific keywords.
+"""
+
+            response = self.client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are an expert email analyst. Analyze emails to identify requests for documents, reports, proposals, or any written deliverables."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=300,
+                temperature=0.1
+            )
+            
+            # Parse the response
+            import json
+            analysis = json.loads(response.choices[0].message.content.strip())
+            
+            return {
+                'requires_response': analysis.get('requires_document_response', False),
+                'confidence_score': float(analysis.get('confidence_score', 0.0)),
+                'matched_keywords': [analysis.get('document_type_mentioned', 'document')],
+                'document_references': analysis.get('document_references', []),
+                'reasoning': analysis.get('reasoning', ''),
+                'urgency_level': analysis.get('urgency_level', 'medium'),
+                'analysis_method': 'openai_analysis'
+            }
+            
+        except Exception as e:
+            print(f"Error in OpenAI analysis: {e}")
+            # Fallback to simple keyword matching
+            return self._fallback_analysis(email)
+    
+    def _fallback_analysis(self, email: Dict) -> Dict:
+        """Simple fallback analysis if OpenAI fails"""
         subject = email['subject'].lower()
         body = email['body'].lower()
-        sender = email['sender'].lower()
-        
-        # Combine all text for analysis
         full_text = f"{subject} {body}"
         
-        # Enhanced keyword patterns for document requests
-        document_request_patterns = [
-            # Direct requests
-            r'\b(send|share|provide|submit)\s+.*\b(document|doc|file|report|paper)\b',
-            r'\b(where\s+is|what\s+about|status\s+of|update\s+on)\s+.*\b(document|doc|file|report|paper)\b',
-            r'\b(pending|waiting\s+for|awaiting|expecting)\s+.*\b(document|doc|file|report|paper)\b',
-            
-            # Status inquiries
-            r'\b(ready|finished|completed|done)\s+.*\b(document|doc|file|report|paper)\b',
-            r'\b(document|doc|file|report|paper)\s+.*\b(ready|finished|completed|done)\b',
-            
-            # Review requests
-            r'\b(review|check|look\s+at|feedback\s+on)\s+.*\b(document|doc|file|report|paper)\b',
-            r'\bplease\s+(review|check|send|share)\b',
-            
-            # Deadline related
-            r'\b(deadline|due\s+date|timeline)\b.*\b(document|doc|file|report|paper)\b',
-            r'\b(urgent|asap|immediately)\b.*\b(document|doc|file|report|paper)\b',
-            
-            # Work completion
-            r'\b(work|task|project)\s+.*\b(complete|finished|done|ready)\b',
-            r'\b(complete|finished|done|ready)\s+.*\b(work|task|project)\b'
+        # Simple keywords for fallback
+        document_keywords = [
+            'document', 'report', 'proposal', 'pdf', 'file', 'deliverable',
+            'update', 'status', 'progress', 'review', 'send', 'share',
+            'complete', 'done', 'finished', 'ready'
         ]
         
-        # Simple keyword fallback
-        simple_keywords = [
-            'pending document', 'document review', 'please review', 'awaiting document',
-            'document status', 'completed work', 'finished document', 'send document',
-            'share document', 'document ready', 'work done', 'project complete',
-            'status update', 'where is', 'when will', 'document deadline'
-        ]
-        
-        matched_keywords = []
-        confidence_score = 0.0
-        document_references = []
-        
-        # Check regex patterns (higher confidence)
-        for pattern in document_request_patterns:
-            matches = re.findall(pattern, full_text)
-            if matches:
-                matched_keywords.extend([match[0] if isinstance(match, tuple) else match for match in matches])
-                confidence_score += 0.3
-        
-        # Check simple keywords (lower confidence)
-        for keyword in simple_keywords:
-            if keyword in full_text:
-                matched_keywords.append(keyword)
-                confidence_score += 0.1
-        
-        # Extract potential document references
-        doc_name_patterns = [
-            r'"([^"%]*(?:document|doc|file|report|paper|project)[^"%]*)"|\'([^\']*(?:document|doc|file|report|paper|project)[^\']*)\'',
-            r'\b([A-Z][a-zA-Z\s]+(?:Report|Document|Paper|Project|Analysis))\b',
-            r'\b(\w+\s+(?:document|doc|file|report|paper|project))\b'
-        ]
-        
-        for pattern in doc_name_patterns:
-            matches = re.findall(pattern, email['subject'] + ' ' + email['body'], re.IGNORECASE)
-            for match in matches:
-                if isinstance(match, tuple):
-                    for submatch in match:
-                        if submatch.strip():
-                            document_references.append(submatch.strip())
-                else:
-                    document_references.append(match.strip())
-        
-        # Remove duplicates and filter out very short references
-        document_references = list(set([ref for ref in document_references if len(ref) > 3]))
-        
-        # Boost confidence if sender seems to be requesting something
-        question_indicators = ['?', 'when', 'where', 'what', 'how', 'please', 'can you', 'could you']
-        if any(indicator in full_text for indicator in question_indicators):
-            confidence_score += 0.1
-        
-        # Reduce confidence for automated emails
-        automated_indicators = ['noreply', 'no-reply', 'automated', 'system', 'notification']
-        if any(indicator in sender for indicator in automated_indicators):
-            confidence_score -= 0.2
-        
-        # Determine if response is required (threshold-based)
-        requires_response = confidence_score > 0.2 and len(matched_keywords) > 0
+        matched_keywords = [kw for kw in document_keywords if kw in full_text]
+        confidence = min(len(matched_keywords) * 0.2, 1.0)
         
         return {
-            'requires_response': requires_response,
-            'confidence_score': min(confidence_score, 1.0),  # Cap at 1.0
-            'matched_keywords': list(set(matched_keywords)),
-            'document_references': document_references[:10],  # Limit to top 10
-            'analysis_method': 'enhanced_pattern_matching'
+            'requires_response': confidence > 0.3,
+            'confidence_score': confidence,
+            'matched_keywords': matched_keywords,
+            'document_references': [],
+            'reasoning': 'Fallback keyword matching',
+            'urgency_level': 'medium',
+            'analysis_method': 'fallback_keywords'
         }
     
     def send_email(self, to_email: str, subject: str, body: str, attachment_path: Optional[str] = None) -> bool:
