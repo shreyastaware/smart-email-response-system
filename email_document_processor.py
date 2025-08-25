@@ -135,12 +135,13 @@ class EmailDocumentProcessor:
                             summary
                         )
                         
-                        # Send email
+                        # Send email as reply
                         success = self.gmail_processor.send_email(
                             email_response['to'],
                             email_response['subject'], 
                             email_response['body'],
-                            pdf_path if pdf_created else None
+                            pdf_path if pdf_created else None,
+                            email_response.get('original_email_id')  # Pass original email ID for threading
                         )
                         
                         if success:

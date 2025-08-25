@@ -62,8 +62,28 @@ class EmailDocumentAgent:
         """Create tool for reading Google Docs"""
         def read_docs() -> Dict:
             try:
+                print("📄 Scanning Google Docs...")
                 all_docs = self.docs_processor.get_all_docs()
+                print(f"📊 Found {len(all_docs)} total documents")
+                
+                if all_docs:
+                    print("📋 Document titles found:")
+                    for i, doc in enumerate(all_docs[:5], 1):  # Show first 5
+                        print(f"   {i}. {doc['title']}")
+                    if len(all_docs) > 5:
+                        print(f"   ... and {len(all_docs) - 5} more")
+                
                 completed_docs = self.docs_processor.find_completed_docs(all_docs)
+                print(f"✅ Found {len(completed_docs)} completed documents (ending with '{Config.COMPLETION_MARKER}')")
+                
+                if completed_docs:
+                    print("📝 Completed documents:")
+                    for i, doc in enumerate(completed_docs, 1):
+                        print(f"   {i}. {doc['title']} (ID: {doc['id']})")
+                else:
+                    print(f"💡 No documents found ending with '{Config.COMPLETION_MARKER}'")
+                    print("   Make sure your Google Docs titles end with 'Done'")
+                    print("   Example: 'Project Report Done'")
                 
                 return {
                     'success': True,
@@ -115,26 +135,38 @@ class EmailDocumentAgent:
         """Create tool for processing documents and creating summaries"""
         def process_document(doc_id: str) -> Dict:
             try:
+                print(f"🔄 Processing document with ID: {doc_id}")
+                
                 # Get document data
                 doc_data = self.docs_processor.get_document_summary_data(doc_id)
                 if not doc_data:
                     return {
                         'success': False,
-                        'error': 'Could not retrieve document data'
+                        'error': f'Could not retrieve document data for ID: {doc_id}. Check Google API permissions and document access.'
                     }
                 
+                print(f"📝 Document retrieved: {doc_data['title']}")
+                print(f"📏 Content length: {doc_data['size']} characters")
+                
                 # Generate summary
+                print("🤖 Generating AI summary...")
                 summary = self.document_processor.summarize_document(doc_data)
                 
                 # Create PDF
                 pdf_filename = f"{doc_data['title'].replace(' ', '_').replace('Done', '').strip('_')}.pdf"
                 pdf_path = os.path.join(os.getcwd(), pdf_filename)
                 
+                print(f"📄 Creating PDF: {pdf_filename}")
                 pdf_created = self.docs_processor.create_pdf_from_text(
                     doc_data['content'],
                     doc_data['title'],
                     pdf_path
                 )
+                
+                if pdf_created:
+                    print(f"✅ PDF created successfully: {pdf_path}")
+                else:
+                    print("⚠️ PDF creation failed")
                 
                 return {
                     'success': True,
@@ -166,12 +198,13 @@ class EmailDocumentAgent:
                     summary
                 )
                 
-                # Send email
+                # Send email as reply
                 success = self.gmail_processor.send_email(
                     email_response['to'],
                     email_response['subject'],
                     email_response['body'],
-                    pdf_path
+                    pdf_path,
+                    email_response.get('original_email_id')  # Pass original email ID for threading
                 )
                 
                 return {

@@ -15,7 +15,17 @@ class DocsProcessor:
     
     def initialize(self):
         """Initialize Google Docs and Drive services"""
-        self.docs_service, self.drive_service = self.auth.authenticate_docs_and_drive()
+        try:
+            print("🔐 Authenticating with Google APIs...")
+            self.docs_service, self.drive_service = self.auth.authenticate_docs_and_drive()
+            print("✅ Google Docs and Drive services initialized successfully")
+        except Exception as e:
+            print(f"❌ Failed to initialize Google services: {e}")
+            print("💡 Make sure you have:")
+            print("   - Valid Google OAuth credentials in .env")
+            print("   - Google Docs API and Drive API enabled")
+            print("   - Proper redirect URI configured (http://localhost:8080)")
+            raise
     
     def get_all_docs(self) -> List[Dict]:
         """Get all Google Docs from user's Drive"""
@@ -59,15 +69,36 @@ class DocsProcessor:
     def get_document_content(self, doc_id: str) -> Optional[str]:
         """Get the full text content of a Google Doc"""
         if not self.docs_service:
+            print("🔄 Initializing Google Docs service...")
             self.initialize()
         
         try:
+            print(f"📖 Fetching document content for ID: {doc_id}")
             document = self.docs_service.documents().get(documentId=doc_id).execute()
             content = self._extract_text_from_document(document)
+            
+            if content:
+                print(f"✅ Document content extracted: {len(content)} characters")
+            else:
+                print("⚠️ Document appears to be empty")
+                
             return content
             
         except Exception as e:
-            print(f"Error getting document content for {doc_id}: {e}")
+            print(f"❌ Error getting document content for {doc_id}: {e}")
+            print(f"   Error type: {type(e).__name__}")
+            
+            # Check if it's a permission issue
+            if "forbidden" in str(e).lower() or "403" in str(e):
+                print("   💡 This might be a permissions issue. Check if:")
+                print("      - The document exists and is accessible")
+                print("      - Your Google account has access to this document")
+                print("      - Google Docs API is enabled in your project")
+            elif "not found" in str(e).lower() or "404" in str(e):
+                print("   💡 Document not found. Check if:")
+                print("      - The document ID is correct")
+                print("      - The document hasn't been deleted")
+                
             return None
     
     def _extract_text_from_document(self, document: Dict) -> str:
@@ -311,16 +342,21 @@ class DocsProcessor:
     def get_document_summary_data(self, doc_id: str) -> Optional[Dict]:
         """Get document data for summarization"""
         if not self.drive_service or not self.docs_service:
+            print("🔄 Initializing Google services...")
             self.initialize()
         
         try:
+            print(f"📄 Fetching document metadata for ID: {doc_id}")
             # Get document metadata
             file_data = self.drive_service.files().get(fileId=doc_id).execute()
+            print(f"✅ Document found: {file_data['name']}")
             
             # Get document content
+            print("📖 Fetching document content...")
             content = self.get_document_content(doc_id)
             
             if content:
+                print(f"✅ Content retrieved: {len(content)} characters")
                 return {
                     'id': doc_id,
                     'title': file_data['name'],
@@ -328,9 +364,12 @@ class DocsProcessor:
                     'modified_time': file_data.get('modifiedTime', ''),
                     'size': len(content)
                 }
-            
-            return None
+            else:
+                print("❌ No content retrieved from document")
+                return None
             
         except Exception as e:
-            print(f"Error getting document summary data: {e}")
+            print(f"❌ Error getting document summary data: {e}")
+            print(f"   Document ID: {doc_id}")
+            print(f"   Error type: {type(e).__name__}")
             return None

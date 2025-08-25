@@ -73,11 +73,12 @@ class DocumentProcessor:
             3. Include the summary below
             4. Mention that the full document is attached as PDF
             5. Be polite and professional
+            6. End with just "Thank you" or similar - NO signature like "Best Regards, [Your Name]"
             
             Document Summary:
             {summary}
             
-            Write a complete email body (no subject line needed).
+            Write a complete email body (no subject line needed, no signature with placeholder names).
             """
             
             response = self.client.chat.completions.create(
@@ -128,7 +129,7 @@ Document Summary:
 
 Please find the complete document attached as a PDF file. Feel free to reach out if you have any questions or need any clarifications.
 
-Best regards"""
+Thank you."""
         
         return {
             'to': self._extract_sender_email(original_email['sender']),

@@ -1,4 +1,5 @@
 *env
+*pdf
 *pickle
 .DS_Store
 __pycache__/

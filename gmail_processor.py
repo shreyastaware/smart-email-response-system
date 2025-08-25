@@ -255,8 +255,8 @@ Focus on whether this email is asking for ANY kind of written work, deliverable,
             'analysis_method': 'fallback_keywords'
         }
     
-    def send_email(self, to_email: str, subject: str, body: str, attachment_path: Optional[str] = None) -> bool:
-        """Send an email with optional attachment"""
+    def send_email(self, to_email: str, subject: str, body: str, attachment_path: Optional[str] = None, original_email_id: Optional[str] = None) -> bool:
+        """Send an email with optional attachment, optionally as a reply"""
         if not self.service:
             self.initialize()
         
@@ -283,17 +283,41 @@ Focus on whether this email is asking for ANY kind of written work, deliverable,
             # Encode message
             raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
             
+            # Prepare send body
+            send_body = {'raw': raw_message}
+            
+            # If this is a reply, add threading information
+            if original_email_id:
+                try:
+                    # Get the original message to extract thread ID
+                    original_message = self.service.users().messages().get(
+                        userId='me',
+                        id=original_email_id,
+                        format='metadata'
+                    ).execute()
+                    
+                    thread_id = original_message.get('threadId')
+                    if thread_id:
+                        send_body['threadId'] = thread_id
+                        print(f"📧 Sending as reply to thread: {thread_id}")
+                    
+                except Exception as e:
+                    print(f"⚠️ Could not get thread info, sending as new message: {e}")
+            
             # Send message
             send_message = self.service.users().messages().send(
                 userId='me',
-                body={'raw': raw_message}
+                body=send_body
             ).execute()
             
-            print(f"Email sent successfully. Message ID: {send_message['id']}")
+            if original_email_id:
+                print(f"✅ Reply sent successfully. Message ID: {send_message['id']}")
+            else:
+                print(f"✅ Email sent successfully. Message ID: {send_message['id']}")
             return True
             
         except Exception as e:
-            print(f"Error sending email: {e}")
+            print(f"❌ Error sending email: {e}")
             return False
     
     def extract_sender_email(self, sender: str) -> str:
