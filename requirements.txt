@@ -1,4 +1,3 @@
-portia-py
 google-auth
 google-auth-oauthlib
 google-auth-httplib2
@@ -8,3 +7,4 @@ PyPDF2
 reportlab
 python-docx
 openai
+portia-sdk-python

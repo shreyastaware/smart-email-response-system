@@ -1,7 +1,7 @@
 import os
 import time
 from typing import List, Dict, Optional
-from portia import Agent, PlanRun, Tool, Clarification
+from portia import Portia, PlanRun, Tool, Clarification, PlanBuilder
 from gmail_processor import GmailProcessor
 from docs_processor import DocsProcessor
 from document_processor import DocumentProcessor
@@ -15,8 +15,8 @@ class EmailDocumentAgent:
         self.docs_processor = DocsProcessor()
         self.document_processor = DocumentProcessor()
         
-        # Initialize Portia Agent
-        self.agent = Agent(api_key=Config.PORTIA_API_KEY)
+        # Initialize Portia client
+        self.portia = Portia(api_key=Config.PORTIA_API_KEY)
         
         # Define tools
         self.tools = [
@@ -28,17 +28,18 @@ class EmailDocumentAgent:
         ]
     
     def _create_email_reader_tool(self) -> Tool:
-        """Create tool for reading emails"""
-        def read_emails(max_results: int = 50) -> Dict:
+        """Create tool for reading emails from the last 7 days"""
+        def read_emails(days_back: int = 7, max_results: int = 100) -> Dict:
             try:
-                emails = self.gmail_processor.get_recent_emails(max_results)
+                emails = self.gmail_processor.get_recent_emails(days_back, max_results)
                 response_required = self.gmail_processor.identify_response_required_emails(emails)
                 
                 return {
                     'success': True,
                     'total_emails': len(emails),
                     'response_required_emails': response_required,
-                    'count_response_required': len(response_required)
+                    'count_response_required': len(response_required),
+                    'days_analyzed': days_back
                 }
             except Exception as e:
                 return {
@@ -48,7 +49,7 @@ class EmailDocumentAgent:
         
         return Tool(
             name="read_emails",
-            description="Read recent emails and identify those requiring responses about pending documents",
+            description="Read recent emails from the last 7 days and intelligently identify those requiring responses about pending documents",
             function=read_emails
         )
     
@@ -78,19 +79,20 @@ class EmailDocumentAgent:
         )
     
     def _create_document_matcher_tool(self) -> Tool:
-        """Create tool for matching documents to emails"""
+        """Create tool for intelligently matching documents to emails"""
         def match_documents(email_data: Dict, completed_docs: List[Dict]) -> Dict:
             try:
-                email_context = f"{email_data['subject']} {email_data['body']}"
                 matched_docs = self.docs_processor.match_docs_to_email_context(
                     completed_docs, 
-                    email_context
+                    email_data  # Pass the full email data object
                 )
                 
                 return {
                     'success': True,
                     'matched_docs': matched_docs,
-                    'count_matched': len(matched_docs)
+                    'count_matched': len(matched_docs),
+                    'email_subject': email_data['subject'],
+                    'document_references': email_data.get('document_references', [])
                 }
             except Exception as e:
                 return {
@@ -100,7 +102,7 @@ class EmailDocumentAgent:
         
         return Tool(
             name="match_documents",
-            description="Match completed documents to email context using keyword analysis",
+            description="Intelligently match completed documents to email using content analysis, document references, and semantic matching",
             function=match_documents
         )
     
@@ -188,50 +190,50 @@ class EmailDocumentAgent:
     def create_email_processing_plan(self) -> PlanRun:
         """Create a multi-agent plan for processing emails and documents"""
         
-        plan_steps = [
-            {
-                'step': 1,
-                'description': 'Read recent emails and identify response-required emails',
-                'tool': 'read_emails',
-                'clarification': Clarification(
-                    question="How many recent emails should I check?",
-                    options=["25", "50", "100"],
-                    default="50"
-                )
-            },
-            {
-                'step': 2,
-                'description': 'Read Google Docs and identify completed documents',
-                'tool': 'read_docs'
-            },
-            {
-                'step': 3,
-                'description': 'Match completed documents to response-required emails',
-                'tool': 'match_documents',
-                'condition': 'response_required_emails_found AND completed_docs_found'
-            },
-            {
-                'step': 4,
-                'description': 'Process matched documents (summarize and create PDFs)',
-                'tool': 'process_document',
-                'condition': 'documents_matched'
-            },
-            {
-                'step': 5,
-                'description': 'Send response emails with summaries and PDFs',
-                'tool': 'send_response_email',
-                'condition': 'documents_processed'
-            }
-        ]
-        
-        # Create and return PlanRun
-        plan_run = self.agent.create_plan_run(
-            plan_steps=plan_steps,
-            tools=self.tools,
-            name="Email Document Processing Plan"
-        )
-        
-        return plan_run
+        try:
+            # Create a plan using PlanBuilder
+            plan_builder = PlanBuilder()
+            
+            # Add steps to the plan
+            plan_builder.add_step(
+                "Read recent emails and identify response-required emails",
+                tool_name="read_emails"
+            )
+            
+            plan_builder.add_step(
+                "Read Google Docs and identify completed documents", 
+                tool_name="read_docs"
+            )
+            
+            plan_builder.add_step(
+                "Match completed documents to response-required emails",
+                tool_name="match_documents"
+            )
+            
+            plan_builder.add_step(
+                "Process matched documents (summarize and create PDFs)",
+                tool_name="process_document"
+            )
+            
+            plan_builder.add_step(
+                "Send response emails with summaries and PDFs",
+                tool_name="send_response_email"
+            )
+            
+            # Build the plan
+            plan = plan_builder.build()
+            
+            # Create and return PlanRun
+            plan_run = self.portia.create_plan_run(
+                plan=plan,
+                tools=self.tools
+            )
+            
+            return plan_run
+            
+        except Exception as e:
+            print(f"Error creating plan: {e}")
+            return None
     
     def execute_full_workflow(self) -> Dict:
         """Execute the complete email and document processing workflow"""
@@ -247,9 +249,9 @@ class EmailDocumentAgent:
         try:
             print("🚀 Starting Email Document Processing Workflow...")
             
-            # Step 1: Read emails
-            print("📧 Step 1: Reading recent emails...")
-            email_result = self.tools[0].function()
+            # Step 1: Read emails from last 7 days
+            print("📧 Step 1: Reading recent emails (last 7 days)...")
+            email_result = self.tools[0].function(days_back=7, max_results=100)
             results['steps_completed'].append('read_emails')
             
             if not email_result['success']:
@@ -257,6 +259,7 @@ class EmailDocumentAgent:
                 return results
             
             response_emails = email_result['response_required_emails']
+            print(f"   Analyzed {email_result['total_emails']} emails from last {email_result['days_analyzed']} days")
             print(f"   Found {len(response_emails)} emails requiring responses")
             
             if not response_emails:
@@ -280,19 +283,25 @@ class EmailDocumentAgent:
                 return results
             
             # Step 3-5: Process each email that requires response
-            for email in response_emails:
-                print(f"\\n🔄 Processing email: {email['subject'][:50]}...")
+            for i, email in enumerate(response_emails, 1):
+                print(f"\n🔄 Processing email {i}/{len(response_emails)}: {email['subject'][:50]}...")
+                print(f"   From: {email['sender'][:40]}...")
+                print(f"   Confidence: {email.get('confidence_score', 0):.2f}")
+                
+                if email.get('document_references'):
+                    print(f"   Referenced docs: {', '.join(email['document_references'][:2])}...")
                 
                 # Match documents
                 match_result = self.tools[2].function(email, completed_docs)
                 
                 if not match_result['success'] or not match_result['matched_docs']:
-                    print(f"   No matching documents found for this email")
+                    print(f"   ❌ No matching documents found for this email")
                     continue
                 
                 # Process the best matching document
                 best_match = match_result['matched_docs'][0]
-                print(f"   Best matching document: {best_match['title']}")
+                print(f"   ✅ Best match: {best_match['title']} (score: {best_match['relevance_score']})")
+                print(f"   Match reasons: {', '.join(best_match['match_reasons'][:2])}...")
                 
                 process_result = self.tools[3].function(best_match['id'])
                 

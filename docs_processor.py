@@ -144,23 +144,169 @@ class DocsProcessor:
             print(f"Error creating PDF: {e}")
             return False
     
-    def match_docs_to_email_context(self, completed_docs: List[Dict], email_context: str) -> List[Dict]:
-        """Match completed documents to email context using keywords"""
+    def match_docs_to_email_context(self, completed_docs: List[Dict], email_data: Dict) -> List[Dict]:
+        """Intelligently match completed documents to email using multiple criteria"""
         matched_docs = []
-        email_words = set(email_context.lower().split())
+        
+        email_subject = email_data['subject'].lower()
+        email_body = email_data['body'].lower()
+        document_references = email_data.get('document_references', [])
+        
+        print(f"🔍 Matching {len(completed_docs)} completed docs to email context...")
+        if document_references:
+            print(f"   Document references found: {document_references[:3]}...")
         
         for doc in completed_docs:
-            doc_words = set(doc['title'].lower().split())
+            doc_title = doc['title'].lower()
+            doc_title_clean = doc_title.replace('done', '').strip()
             
-            # Simple keyword matching - can be enhanced with more sophisticated NLP
-            overlap = len(email_words.intersection(doc_words))
-            if overlap > 0:
-                doc['relevance_score'] = overlap
-                matched_docs.append(doc)
+            relevance_score = self._calculate_document_relevance(
+                doc_title_clean, 
+                email_subject, 
+                email_body, 
+                document_references
+            )
+            
+            if relevance_score > 0:
+                doc_copy = doc.copy()
+                doc_copy['relevance_score'] = relevance_score
+                doc_copy['match_reasons'] = self._get_match_reasons(
+                    doc_title_clean, 
+                    email_subject, 
+                    email_body, 
+                    document_references
+                )
+                matched_docs.append(doc_copy)
         
         # Sort by relevance score
         matched_docs.sort(key=lambda x: x.get('relevance_score', 0), reverse=True)
+        
+        # Log top matches
+        for i, doc in enumerate(matched_docs[:3]):
+            print(f"   Match {i+1}: {doc['title']} (score: {doc['relevance_score']:.2f})")
+            print(f"     Reasons: {', '.join(doc['match_reasons'])}")
+        
         return matched_docs
+    
+    def _calculate_document_relevance(self, doc_title: str, email_subject: str, email_body: str, document_refs: List[str]) -> float:
+        """Calculate how relevant a document is to an email"""
+        score = 0.0
+        
+        # 1. Direct title matching with document references (highest priority)
+        for ref in document_refs:
+            ref_clean = ref.lower().strip('"\'')
+            # Exact match
+            if ref_clean in doc_title or doc_title in ref_clean:
+                score += 2.0
+            # Partial match (multiple words)
+            ref_words = set(ref_clean.split())
+            doc_words = set(doc_title.split())
+            common_words = ref_words.intersection(doc_words)
+            if len(common_words) >= 2:
+                score += 1.5
+            elif len(common_words) == 1 and len(ref_words) <= 2:
+                score += 1.0
+        
+        # 2. Subject line matching (high priority)
+        subject_words = set(email_subject.split())
+        doc_words = set(doc_title.split())
+        subject_overlap = len(subject_words.intersection(doc_words))
+        
+        if subject_overlap >= 2:
+            score += 1.0
+        elif subject_overlap == 1:
+            score += 0.5
+        
+        # 3. Body content matching (medium priority)
+        body_words = set(email_body.split())
+        body_overlap = len(body_words.intersection(doc_words))
+        
+        if body_overlap >= 3:
+            score += 0.7
+        elif body_overlap >= 2:
+            score += 0.4
+        elif body_overlap == 1:
+            score += 0.2
+        
+        # 4. Semantic matching for common document types
+        doc_type_matches = self._check_document_type_matching(doc_title, email_subject + ' ' + email_body)
+        score += doc_type_matches * 0.3
+        
+        # 5. Project/category matching
+        project_score = self._check_project_category_matching(doc_title, email_subject + ' ' + email_body)
+        score += project_score * 0.5
+        
+        return round(score, 2)
+    
+    def _get_match_reasons(self, doc_title: str, email_subject: str, email_body: str, document_refs: List[str]) -> List[str]:
+        """Get human-readable reasons for why a document matched"""
+        reasons = []
+        
+        # Check document references
+        for ref in document_refs:
+            ref_clean = ref.lower().strip('"\'“”')
+            if ref_clean in doc_title or doc_title in ref_clean:
+                reasons.append(f"Direct reference match: '{ref}'")
+            else:
+                ref_words = set(ref_clean.split())
+                doc_words = set(doc_title.split())
+                common = ref_words.intersection(doc_words)
+                if len(common) >= 2:
+                    reasons.append(f"Partial reference match: {', '.join(common)}")
+        
+        # Check subject matching
+        subject_words = set(email_subject.split())
+        doc_words = set(doc_title.split())
+        subject_common = subject_words.intersection(doc_words)
+        if len(subject_common) >= 2:
+            reasons.append(f"Subject match: {', '.join(list(subject_common)[:3])}")
+        
+        # Check document type
+        doc_types = ['report', 'analysis', 'document', 'project', 'paper', 'study', 'presentation']
+        full_text = email_subject + ' ' + email_body
+        for doc_type in doc_types:
+            if doc_type in doc_title and doc_type in full_text:
+                reasons.append(f"Document type: {doc_type}")
+                break
+        
+        return reasons if reasons else ['General keyword overlap']
+    
+    def _check_document_type_matching(self, doc_title: str, email_content: str) -> int:
+        """Check if document type mentioned in email matches document title"""
+        doc_types = {
+            'report': ['report', 'reporting', 'summary', 'findings'],
+            'analysis': ['analysis', 'analyze', 'research', 'study'],
+            'presentation': ['presentation', 'slides', 'deck', 'ppt'],
+            'document': ['document', 'doc', 'documentation'],
+            'paper': ['paper', 'article', 'publication'],
+            'proposal': ['proposal', 'plan', 'strategy'],
+            'review': ['review', 'evaluation', 'assessment']
+        }
+        
+        matches = 0
+        for doc_type, keywords in doc_types.items():
+            if any(keyword in doc_title for keyword in keywords):
+                if any(keyword in email_content for keyword in keywords):
+                    matches += 1
+        
+        return matches
+    
+    def _check_project_category_matching(self, doc_title: str, email_content: str) -> int:
+        """Check for project or category name matching"""
+        # Extract potential project names (capitalized words)
+        import re
+        
+        doc_projects = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', doc_title)
+        email_projects = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', email_content)
+        
+        # Count matching project names
+        matches = 0
+        for doc_proj in doc_projects:
+            if any(doc_proj.lower() in email_proj.lower() or email_proj.lower() in doc_proj.lower() 
+                   for email_proj in email_projects):
+                matches += 1
+        
+        return matches
     
     def get_document_summary_data(self, doc_id: str) -> Optional[Dict]:
         """Get document data for summarization"""

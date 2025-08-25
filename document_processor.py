@@ -1,11 +1,11 @@
 import os
-import openai
+from openai import OpenAI
 from typing import Dict, Optional
 from config import Config
 
 class DocumentProcessor:
     def __init__(self):
-        openai.api_key = Config.OPENAI_API_KEY
+        self.client = OpenAI(api_key=Config.OPENAI_API_KEY)
     
     def summarize_document(self, document_data: Dict) -> str:
         """Generate a summary of the document using OpenAI"""
@@ -29,7 +29,7 @@ class DocumentProcessor:
             Provide a summary that would be suitable for sharing in a professional email response.
             """
             
-            response = openai.ChatCompletion.create(
+            response = self.client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": "You are a professional assistant helping to summarize completed work documents. Provide clear, concise, and professional summaries."},
@@ -80,7 +80,7 @@ class DocumentProcessor:
             Write a complete email body (no subject line needed).
             """
             
-            response = openai.ChatCompletion.create(
+            response = self.client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": "You are a professional assistant composing email responses about completed work. Write clear, polite, and informative emails."},

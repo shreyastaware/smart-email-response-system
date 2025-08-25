@@ -19,7 +19,7 @@ from pathlib import Path
 current_dir = Path(__file__).parent
 sys.path.append(str(current_dir))
 
-from portia_agent import EmailDocumentAgent
+from email_document_processor import EmailDocumentProcessor
 from config import Config
 
 def check_configuration():
@@ -63,15 +63,15 @@ def main():
         return 1
     
     try:
-        # Initialize and run the agent
-        print("🤖 Initializing Portia AI Agent...")
-        agent = EmailDocumentAgent()
+        # Initialize and run the processor
+        print("🤖 Initializing Email Document Processor...")
+        processor = EmailDocumentProcessor()
         
         print("🚀 Starting workflow execution...")
         print()
         
-        # Execute the workflow
-        results = agent.execute_full_workflow()
+        # Execute the workflow (7 days back, max 100 emails)
+        results = processor.execute_workflow(days_back=7, max_results=100)
         
         # Display results
         print("\\n" + "=" * 60)

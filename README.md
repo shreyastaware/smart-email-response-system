@@ -88,18 +88,26 @@ For the agent to identify completed documents, make sure your Google Docs titles
 - "Meeting Notes - Q3 Planning Done"
 - "Research Analysis Done"
 
-### 5. Email Keywords
+### 5. Email Analysis Configuration
 
-The agent identifies emails requiring responses by looking for these keywords:
-- "pending document"
-- "document review" 
-- "please review"
-- "awaiting document"
-- "document status"
-- "completed work"
-- "finished document"
+The agent uses advanced content analysis to identify emails requiring responses. It looks for:
 
-You can modify these keywords in `config.py`.
+**Document Request Patterns:**
+- Direct requests: "send document", "share report", "provide file"
+- Status inquiries: "where is the document?", "status of report"
+- Work completion: "project complete", "work finished"
+- Review requests: "please review", "feedback on document"
+- Deadline related: "document deadline", "urgent report"
+
+**Time Range:**
+- By default, analyzes emails from the **last 7 days**
+- You can modify this in the `get_recent_emails()` function call
+
+**Intelligence Features:**
+- Extracts document references from email content
+- Uses regex patterns for sophisticated matching
+- Calculates confidence scores for each potential response
+- Filters out automated/system emails
 
 ## Usage
 
@@ -130,11 +138,21 @@ python portia_agent.py
 
 ### Workflow Steps
 
-1. **Email Analysis**: The agent reads your recent Gmail messages and identifies emails containing keywords that suggest someone is asking about document status.
+1. **Enhanced Email Analysis**: 
+   - Reads Gmail messages from the **last 7 days** (configurable)
+   - Uses advanced pattern matching with regex to identify document requests
+   - Extracts document references mentioned in emails
+   - Calculates confidence scores for each potential response
+   - Handles both plain text and HTML emails
 
 2. **Document Discovery**: Scans your Google Docs for documents with titles ending in "Done".
 
-3. **Intelligent Matching**: Uses keyword analysis to match completed documents to relevant email requests.
+3. **Intelligent Document Matching**: 
+   - **Direct Reference Matching**: Matches document names mentioned in emails
+   - **Subject Line Analysis**: Compares email subjects with document titles  
+   - **Content Semantic Matching**: Analyzes document types (report, analysis, etc.)
+   - **Project/Category Matching**: Identifies project names and categories
+   - **Relevance Scoring**: Ranks matches by confidence and relevance
 
 4. **Content Processing**: 
    - Extracts the full text content from matched Google Docs
@@ -166,16 +184,34 @@ email-completed-work/
 
 ## Customization
 
-### Modify Response Keywords
+### Modify Email Analysis Patterns
 
-Edit the `RESPONSE_KEYWORDS` list in `config.py` to change which emails trigger responses:
+The email analysis uses sophisticated regex patterns in `gmail_processor.py`. You can customize:
 
+**Document Request Patterns** (in `_analyze_email_content()`):
 ```python
-RESPONSE_KEYWORDS = [
-    'pending document',
-    'document review',
+document_request_patterns = [
+    r'\b(send|share|provide|submit)\s+.*\b(document|doc|file|report|paper)\b',
+    r'\b(where\s+is|what\s+about|status\s+of)\s+.*\b(document|doc)\b',
+    # Add your custom patterns here
+]
+```
+
+**Simple Keywords** (fallback matching):
+```python
+simple_keywords = [
+    'pending document', 'document review', 'please review',
     # Add your custom keywords here
 ]
+```
+
+### Adjust Time Range for Email Analysis
+
+Change the number of days to analyze in `portia_agent.py`:
+
+```python
+# In execute_full_workflow(), change days_back parameter
+email_result = self.tools[0].function(days_back=14, max_results=100)  # 14 days instead of 7
 ```
 
 ### Adjust Document Completion Marker
