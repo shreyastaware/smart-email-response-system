@@ -172,7 +172,7 @@ USER_EMAIL=your_email@gmail.com
 
 ### 3. Setup Google OAuth
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a project and enable Gmail API + Google Docs API
+2. Create a project and enable Gmail API + Google Drive API
 3. Create OAuth 2.0 credentials (Desktop Application)
 4. Add `http://localhost:8080` to authorized redirect URIs
 5. Download credentials and add Client ID/Secret to `.env`
